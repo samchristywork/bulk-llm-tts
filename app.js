@@ -21,6 +21,7 @@ function log(message) {
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
+app.use('/output', express.static(path.join(__dirname, 'output')));
 
 function sanitizeFilename(filename) {
   return filename
@@ -171,6 +172,29 @@ app.post('/tts', (req, res) => {
           log('POST /tts - No audio content received from TTS API.');
           return res.status(500).send('No audio content received from TTS API.');
         }
+
+        const directoryName = sanitizeFilename(prompt);
+        const outputDir = path.join(__dirname, 'output', directoryName);
+
+        if (!fs.existsSync(outputDir)) {
+          fs.mkdirSync(outputDir, { recursive: true });
+        }
+
+        const filename = `${sanitizeFilename(line)}.mp3`;
+        const filepath = path.join(outputDir, filename);
+
+        const audioBuffer = Buffer.from(audioContent, 'base64');
+
+        fs.writeFile(filepath, audioBuffer, (err) => {
+          if (err) {
+            log(`POST /tts - Error saving MP3 file: ${err}`);
+            console.error('Error saving MP3 file:', err);
+            return res.status(500).send('Error saving MP3 file.');
+          } else {
+            log(`POST /tts - MP3 file saved to ${filepath}`);
+            res.json({ filePath: `/output/${directoryName}/${filename}` } );
+          }
+        });
 
       } catch (parseError) {
         log(`POST /tts - Error parsing JSON: ${parseError}`);
