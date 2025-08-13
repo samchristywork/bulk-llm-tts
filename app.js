@@ -5,6 +5,7 @@ const path = require('path');
 const app = express();
 const port = 3000;
 const gemini_api = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=";
+const fs = require('fs');
 
 dotenv.config();
 
@@ -41,7 +42,6 @@ app.post('/query', (req, res) => {
   });
   log(`POST /query - Sending data to Gemini API: ${postData}`);
 
-
   const options = {
     method: 'POST',
     headers: {
@@ -71,6 +71,26 @@ app.post('/query', (req, res) => {
 
         log(`POST /query - Sending response: ${responseText}`);
         res.json({ response: responseText });
+
+        const directoryName = sanitizeFilename(prompt);
+        const outputDir = path.join(__dirname, 'output', directoryName);
+
+        if (!fs.existsSync(outputDir)) {
+          fs.mkdirSync(outputDir, { recursive: true });
+        }
+
+        const filename = `${sanitizeFilename(line)}.txt`;
+        const filepath = path.join(outputDir, filename);
+
+        fs.writeFile(filepath, responseText, (err) => {
+          if (err) {
+            log(`POST /query - Error saving to file: ${err}`);
+            console.error('Error saving to file:', err);
+          } else {
+            log(`POST /query - Response saved to ${filepath}`);
+          }
+        });
+
       } catch (parseError) {
         log(`POST /query - Error parsing JSON: ${parseError}`);
         console.error('Error parsing JSON:', parseError);
