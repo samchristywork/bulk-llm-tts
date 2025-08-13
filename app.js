@@ -29,187 +29,185 @@ function sanitizeFilename(filename) {
     .replace(/\s+/g, '_');
 }
 
-app.post('/query', (req, res) => {
-  const apiKey = process.env.GEMINI_API_KEY;
+app.post('/query', async (req, res) => {
+  const geminiApiKey = process.env.GEMINI_API_KEY;
+  const ttsApiKey = process.env.TTS_API_KEY;
 
-  if (!apiKey) {
-    log('POST /query - API key is not configured.');
-    return res.status(500).send('API key is not configured.');
+  if (!geminiApiKey) {
+    log('POST /query - Gemini API key is not configured.');
+    return res.status(500).send('Gemini API key is not configured.');
   }
 
-  const prompt = req.body.prompt;
-  const line = req.body.line;
-  const postData = JSON.stringify({
-    contents: [{parts: [{text: prompt + line}]}],
-  });
-  log(`POST /query - Sending data to Gemini API: ${postData}`);
-
-  const options = {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json'
-    }
-  };
-
-  const request = https.request(gemini_api + apiKey, options, (response) => {
-    let data = '';
-
-    response.on('data', (chunk) => {
-      data += chunk;
-    });
-
-    response.on('end', () => {
-      try {
-        const jsonData = JSON.parse(data);
-        if (jsonData.error) {
-          log(`POST /query - Gemini API Error: ${jsonData.error.message}`);
-          return res.status(500).send(jsonData.error.message);
-        }
-
-        let responseText = "";
-        if (jsonData.candidates && jsonData.candidates.length > 0 && jsonData.candidates[0].content && jsonData.candidates[0].content.parts && jsonData.candidates[0].content.parts.length > 0) {
-          responseText = jsonData.candidates[0].content.parts[0].text;
-        }
-
-        log(`POST /query - Sending response: ${responseText}`);
-        res.json({ response: responseText });
-
-        const directoryName = sanitizeFilename(prompt);
-        const outputDir = path.join(__dirname, 'output', directoryName);
-
-        if (!fs.existsSync(outputDir)) {
-          fs.mkdirSync(outputDir, { recursive: true });
-        }
-
-        const filename = `${sanitizeFilename(line)}.txt`;
-        const filepath = path.join(outputDir, filename);
-
-        fs.writeFile(filepath, responseText, (err) => {
-          if (err) {
-            log(`POST /query - Error saving to file: ${err}`);
-            console.error('Error saving to file:', err);
-          } else {
-            log(`POST /query - Response saved to ${filepath}`);
-          }
-        });
-
-      } catch (parseError) {
-        log(`POST /query - Error parsing JSON: ${parseError}`);
-        console.error('Error parsing JSON:', parseError);
-        res.status(500).send('Error parsing the API response.');
-      }
-    });
-  }).on("error", (err) => {
-    log(`POST /query - Error: ${err.message}`);
-    console.error("Error: ", err.message);
-    res.status(500).send('An error occurred while processing your request.');
-  });
-
-  request.write(postData);
-  request.end();
-});
-
-app.post('/tts', (req, res) => {
-  const apiKey = process.env.TTS_API_KEY;
-
-  if (!apiKey) {
-    log('POST /tts - TTS API key is not configured.');
+  if (!ttsApiKey) {
+    log('POST /query - TTS API key is not configured.');
     return res.status(500).send('TTS API key is not configured.');
   }
 
   const prompt = req.body.prompt;
   const line = req.body.line;
+  const combinedPrompt = prompt + line;
 
-  const text = fs.readFileSync(path.join(__dirname, 'output', sanitizeFilename(prompt), `${sanitizeFilename(line)}.txt`), 'utf8');
+  const directoryName = sanitizeFilename(prompt);
+  const outputDir = path.join(__dirname, 'output', directoryName);
 
-  if (!text) {
-    log('POST /tts - No text provided for TTS.');
-    return res.status(400).send('No text provided for TTS.');
+  if (!fs.existsSync(outputDir)) {
+    fs.mkdirSync(outputDir, { recursive: true });
   }
 
-  const postData = JSON.stringify({
-    input: {
-      text: text
-    },
-    voice: {
-      languageCode: 'en-US',
-      name: 'en-US-Neural2-G'
-    },
-    audioConfig: {
-      audioEncoding: 'MP3'
-    }
-  });
+  const filenameBase = sanitizeFilename(line);
+  const textFilepath = path.join(outputDir, `${filenameBase}.txt`);
+  const mp3Filepath = path.join(outputDir, `${filenameBase}.mp3`);
 
-  log(`POST /tts - Sending data to TTS API: ${postData}`);
 
-  const options = {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json'
-    }
-  };
-
-  const request = https.request(tts_api + apiKey, options, (response) => {
-    let data = '';
-
-    response.on('data', (chunk) => {
-      data += chunk;
+  let geminiResponseText = "";
+  try {
+    const geminiPostData = JSON.stringify({
+      contents: [{ parts: [{ text: combinedPrompt }] }],
     });
 
-    response.on('end', () => {
-      try {
-        const jsonData = JSON.parse(data);
-        log(`POST /tts - Received data from TTS API`);
+    log(`POST /query - Sending data to Gemini API: ${geminiPostData}`);
 
-        if (jsonData.error) {
-          log(`POST /tts - TTS API Error: ${jsonData.error.message}`);
-          return res.status(500).send(jsonData.error.message);
-        }
+    const geminiOptions = {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    };
 
-        const audioContent = jsonData.audioContent;
+    geminiResponseText = await new Promise((resolve, reject) => {
+      const geminiRequest = https.request(gemini_api + geminiApiKey, geminiOptions, (response) => {
+        let data = '';
 
-        if (!audioContent) {
-          log('POST /tts - No audio content received from TTS API.');
-          return res.status(500).send('No audio content received from TTS API.');
-        }
-
-        const directoryName = sanitizeFilename(prompt);
-        const outputDir = path.join(__dirname, 'output', directoryName);
-
-        if (!fs.existsSync(outputDir)) {
-          fs.mkdirSync(outputDir, { recursive: true });
-        }
-
-        const filename = `${sanitizeFilename(line)}.mp3`;
-        const filepath = path.join(outputDir, filename);
-
-        const audioBuffer = Buffer.from(audioContent, 'base64');
-
-        fs.writeFile(filepath, audioBuffer, (err) => {
-          if (err) {
-            log(`POST /tts - Error saving MP3 file: ${err}`);
-            console.error('Error saving MP3 file:', err);
-            return res.status(500).send('Error saving MP3 file.');
-          } else {
-            log(`POST /tts - MP3 file saved to ${filepath}`);
-            res.json({ filePath: `/output/${directoryName}/${filename}` } );
-          }
+        response.on('data', (chunk) => {
+          data += chunk;
         });
 
-      } catch (parseError) {
-        log(`POST /tts - Error parsing JSON: ${parseError}`);
-        console.error('Error parsing JSON:', parseError);
-        res.status(500).send('Error parsing the API response.');
+        response.on('end', () => {
+          try {
+            const jsonData = JSON.parse(data);
+            if (jsonData.error) {
+              log(`POST /query - Gemini API Error: ${jsonData.error.message}`);
+              return reject(jsonData.error.message);
+            }
+
+            let responseText = "";
+            if (jsonData.candidates && jsonData.candidates.length > 0 && jsonData.candidates[0].content && jsonData.candidates[0].content.parts && jsonData.candidates[0].content.parts.length > 0) {
+              responseText = jsonData.candidates[0].content.parts[0].text;
+            }
+
+            log(`POST /query - Received Gemini response: ${responseText}`);
+            resolve(responseText);
+
+          } catch (parseError) {
+            log(`POST /query - Error parsing Gemini JSON: ${parseError}`);
+            console.error('Error parsing JSON:', parseError);
+            reject('Error parsing the Gemini API response.');
+          }
+        });
+      }).on("error", (err) => {
+        log(`POST /query - Gemini API Error: ${err.message}`);
+        console.error("Error: ", err.message);
+        reject('An error occurred while processing your request to Gemini.');
+      });
+
+      geminiRequest.write(geminiPostData);
+      geminiRequest.end();
+    });
+
+    fs.writeFile(textFilepath, geminiResponseText, (err) => {
+      if (err) {
+        log(`POST /query - Error saving Gemini response to file: ${err}`);
+        console.error('Error saving to file:', err);
+      } else {
+        log(`POST /query - Gemini response saved to ${textFilepath}`);
       }
     });
-  }).on("error", (err) => {
-    log(`POST /tts - Error: ${err.message}`);
-    console.error("Error: ", err.message);
-    res.status(500).send('An error occurred while processing your request.');
-  });
+  } catch (error) {
+    return res.status(500).send(error);
+  }
+  try {
+    const ttsPostData = JSON.stringify({
+      input: {
+        text: geminiResponseText
+      },
+      voice: {
+        languageCode: 'en-US',
+        name: 'en-US-Neural2-G'
+      },
+      audioConfig: {
+        audioEncoding: 'MP3'
+      }
+    });
 
-  request.write(postData);
-  request.end();
+    log(`POST /query - Sending data to TTS API: ${ttsPostData}`);
+
+    const ttsOptions = {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    };
+
+    const audioContent = await new Promise((resolve, reject) => {
+      const ttsRequest = https.request(tts_api + ttsApiKey, ttsOptions, (response) => {
+        let data = '';
+
+        response.on('data', (chunk) => {
+          data += chunk;
+        });
+
+        response.on('end', () => {
+          try {
+            const jsonData = JSON.parse(data);
+            log(`POST /query - Received data from TTS API`);
+
+            if (jsonData.error) {
+              log(`POST /query - TTS API Error: ${jsonData.error.message}`);
+              return reject(jsonData.error.message);
+            }
+
+            const audioContent = jsonData.audioContent;
+
+            if (!audioContent) {
+              log('POST /query - No audio content received from TTS API.');
+              return reject('No audio content received from TTS API.');
+            }
+
+            resolve(audioContent);
+
+          } catch (parseError) {
+            log(`POST /query - Error parsing TTS JSON: ${parseError}`);
+            console.error('Error parsing JSON:', parseError);
+            reject('Error parsing the TTS API response.');
+          }
+        });
+      }).on("error", (err) => {
+        log(`POST /query - TTS API Error: ${err.message}`);
+        console.error("Error: ", err.message);
+        reject('An error occurred while processing your request to TTS.');
+      });
+
+      ttsRequest.write(ttsPostData);
+      ttsRequest.end();
+    });
+
+    const audioBuffer = Buffer.from(audioContent, 'base64');
+
+    fs.writeFile(mp3Filepath, audioBuffer, (err) => {
+      if (err) {
+        log(`POST /query - Error saving MP3 file: ${err}`);
+        console.error('Error saving MP3 file:', err);
+        return res.status(500).send('Error saving MP3 file.');
+      } else {
+        log(`POST /query - MP3 file saved to ${mp3Filepath}`);
+        const filePath = `/output/${directoryName}/${filenameBase}.mp3`;
+        res.json({ response: geminiResponseText, filePath: filePath });
+      }
+    });
+
+  } catch (error) {
+    return res.status(500).send(error);
+  }
 });
 
 app.listen(port, () => {
