@@ -45,7 +45,7 @@ app.post('/query', async (req, res) => {
 
   const prompt = req.body.prompt;
   const line = req.body.line;
-  const combinedPrompt = prompt + line;
+  const combinedPrompt = prompt + " " + line;
 
   const directoryName = sanitizeFilename(prompt);
   const outputDir = path.join(__dirname, 'output', directoryName);
