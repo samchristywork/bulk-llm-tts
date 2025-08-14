@@ -4,9 +4,66 @@
     <title>Bulk LLM TTS</title>
   </head>
   <body>
-    <input type="text" id="prompt" name="prompt" placeholder="Enter your prompt here..." required><br><br>
-    <textarea id="content" name="content" rows="4" cols="50" placeholder="Enter your content here..."></textarea><br><br>
+    <input type="text" id="prompt" name="prompt" placeholder="Enter your prompt here..." required>
+    <textarea id="content" name="content" rows="4" cols="50" placeholder="Enter your content here..."></textarea>
     <button onclick="submitQueries()">Submit</button>
-    <div id="results"></div>
+    <table id="results">
+      <thead>
+        <tr>
+          <th>Prompt</th>
+          <th>Content</th>
+          <th>Response</th>
+          <th>Audio</th>
+        </tr>
+      </thead>
+      <tbody>
+      </tbody>
+    </table>
+    <script>
+function processLine(line, promptText, resultsBody) {
+  try {
+    fetch('/query', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        prompt: promptText,
+        line: line,
+      })
+    })
+      .then(response => {
+        response.json()
+          .then(data => {
+            console.log(`Response for line: ${line}`, data);
+            let row = resultsBody.insertRow();
+            let promptCell = row.insertCell();
+            let contentCell = row.insertCell();
+            let responseCell = row.insertCell();
+            let audioCell = row.insertCell();
+
+            promptCell.innerHTML = promptText;
+            contentCell.innerHTML = line;
+            responseCell.innerHTML = data.response;
+            audioCell.innerHTML = `<audio controls src="${data.filePath}"></audio>`;
+          })
+      })
+      .catch(error => {
+        handleQueryError(error, line, resultsBody);
+      });
+
+  } catch (error) {
+    handleQueryError(error, line, resultsBody);
+  }
+}
+
+function handleQueryError(error, line, resultsBody) {
+  console.error(`Error submitting query for line: ${line}:`, error);
+  let row = resultsBody.insertRow();
+  let errorCell = row.insertCell();
+  errorCell.colSpan = 4;
+  errorCell.innerHTML = `Error processing line: ${line} - ${error}`;
+}
+    </script>
   </body>
 </html>
