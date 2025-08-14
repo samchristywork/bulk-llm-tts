@@ -2,10 +2,93 @@
 <html>
   <head>
     <title>Bulk LLM TTS</title>
+    <style>
+      body {
+        font-family: sans-serif;
+        margin: 20px;
+        background-color: #f4f4f4;
+      }
+
+      input[type="text"],
+      textarea {
+        width: 100%;
+        padding: 10px;
+        margin-bottom: 10px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        box-sizing: border-box;
+      }
+
+      textarea {
+        resize: vertical;
+        height: 100px;
+      }
+
+      button {
+        background-color: #4CAF50;
+        color: white;
+        padding: 12px 20px;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        margin-bottom: 20px;
+      }
+
+      button:hover {
+        background-color: #3e8e41;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-bottom: 20px;
+        background-color: white;
+        box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+      }
+
+      th,
+      td {
+        border: 1px solid #ddd;
+        padding: 8px;
+        text-align: left;
+      }
+
+      th {
+        background-color: #f2f2f2;
+        font-weight: bold;
+      }
+
+      audio {
+        width: 100%;
+      }
+
+      #results tbody tr:nth-child(odd) {
+        background-color: #f9f9f9;
+      }
+
+      #results tbody tr:hover {
+        background-color: #e9e9e9;
+      }
+    </style>
   </head>
   <body>
-    <input type="text" id="prompt" name="prompt" placeholder="Enter your prompt here..." required>
-    <textarea id="content" name="content" rows="4" cols="50" placeholder="Enter your content here..."></textarea>
+    <h1>Bulk LLM TTS</h1>
+    <label for="prompt">Prompt:</label>
+    <input
+      type="text"
+      id="prompt"
+      name="prompt"
+      placeholder="Enter your prompt here..."
+      required
+    />
+    <label for="content">Content:</label>
+    <textarea
+      id="content"
+      name="content"
+      rows="4"
+      cols="50"
+      placeholder="Enter your content here..."
+    ></textarea>
     <button onclick="submitQueries()">Submit</button>
     <table id="results">
       <thead>
@@ -16,74 +99,76 @@
           <th>Audio</th>
         </tr>
       </thead>
-      <tbody>
-      </tbody>
+      <tbody></tbody>
     </table>
     <script>
-function handleQueryError(error, line, resultsBody) {
-  console.error(`Error submitting query for line: ${line}:`, error);
-  let row = resultsBody.insertRow();
-  let errorCell = row.insertCell();
-  errorCell.colSpan = 4;
-  errorCell.innerHTML = `Error processing line: ${line} - ${error}`;
-}
+      function handleQueryError(error, line, resultsBody) {
+        console.error(`Error submitting query for line: ${line}:`, error);
+        let row = resultsBody.insertRow();
+        let errorCell = row.insertCell();
+        errorCell.colSpan = 4;
+        errorCell.innerHTML = `Error processing line: ${line} - ${error}`;
+      }
 
-function processLine(line, promptText, resultsBody) {
-  try {
-    fetch('/query', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        prompt: promptText,
-        line: line,
-      })
-    })
-      .then(response => {
-        response.json()
-          .then(data => {
-            console.log(`Response for line: ${line}`, data);
-            let row = resultsBody.insertRow();
-            let promptCell = row.insertCell();
-            let contentCell = row.insertCell();
-            let responseCell = row.insertCell();
-            let audioCell = row.insertCell();
-
-            promptCell.innerHTML = promptText;
-            contentCell.innerHTML = line;
-            responseCell.innerHTML = data.response;
-            audioCell.innerHTML = `<audio controls src="${data.filePath}"></audio>`;
+      function processLine(line, promptText, resultsBody) {
+        try {
+          fetch("/query", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              prompt: promptText,
+              line: line,
+            }),
           })
-      })
-      .catch(error => {
-        handleQueryError(error, line, resultsBody);
-      });
+            .then((response) => {
+              response.json().then((data) => {
+                console.log(`Response for line: ${line}`, data);
+                let row = resultsBody.insertRow();
+                let promptCell = row.insertCell();
+                let contentCell = row.insertCell();
+                let responseCell = row.insertCell();
+                let audioCell = row.insertCell();
 
-  } catch (error) {
-    handleQueryError(error, line, resultsBody);
-  }
-}
+                promptCell.innerHTML = promptText;
+                contentCell.innerHTML = line;
+                responseCell.innerHTML = data.response;
+                audioCell.innerHTML = `<audio controls src="${data.filePath}"></audio>`;
+              });
+            })
+            .catch((error) => {
+              handleQueryError(error, line, resultsBody);
+            });
+        } catch (error) {
+          handleQueryError(error, line, resultsBody);
+        }
+      }
 
-function processLines(lines, promptText, resultsBody, timeout) {
-  if (lines.length === 0) return;
+      function processLines(lines, promptText, resultsBody, timeout) {
+        if (lines.length === 0) return;
 
-  const line = lines.shift();
-  processLine(line, promptText, resultsBody);
+        const line = lines.shift();
+        processLine(line, promptText, resultsBody);
 
-  setTimeout(() => {
-    processLines(lines, promptText, resultsBody, timeout);
-  }, timeout);
-}
+        setTimeout(() => {
+          processLines(lines, promptText, resultsBody, timeout);
+        }, timeout);
+      }
 
-function submitQueries() {
-  const promptText = document.getElementById("prompt").value;
-  const lines = document.getElementById("content").value.split('\n').filter(line => line.trim() !== '');
-  const resultsTable = document.getElementById("results");
-  const resultsBody = resultsTable.querySelector("tbody");
+      function submitQueries() {
+        const promptText = document.getElementById("prompt").value;
+        const lines = document
+          .getElementById("content")
+          .value.split("\n")
+          .filter((line) => line.trim() !== "");
+        const resultsTable = document.getElementById("results");
+        const resultsBody = resultsTable.querySelector("tbody");
 
-  processLines(lines, promptText, resultsBody, 4000);
-}
+        resultsBody.innerHTML = "";
+
+        processLines(lines, promptText, resultsBody, 4000);
+      }
     </script>
   </body>
 </html>
