@@ -20,6 +20,14 @@
       </tbody>
     </table>
     <script>
+function handleQueryError(error, line, resultsBody) {
+  console.error(`Error submitting query for line: ${line}:`, error);
+  let row = resultsBody.insertRow();
+  let errorCell = row.insertCell();
+  errorCell.colSpan = 4;
+  errorCell.innerHTML = `Error processing line: ${line} - ${error}`;
+}
+
 function processLine(line, promptText, resultsBody) {
   try {
     fetch('/query', {
@@ -57,12 +65,24 @@ function processLine(line, promptText, resultsBody) {
   }
 }
 
-function handleQueryError(error, line, resultsBody) {
-  console.error(`Error submitting query for line: ${line}:`, error);
-  let row = resultsBody.insertRow();
-  let errorCell = row.insertCell();
-  errorCell.colSpan = 4;
-  errorCell.innerHTML = `Error processing line: ${line} - ${error}`;
+function processLines(lines, promptText, resultsBody, timeout) {
+  if (lines.length === 0) return;
+
+  const line = lines.shift();
+  processLine(line, promptText, resultsBody);
+
+  setTimeout(() => {
+    processLines(lines, promptText, resultsBody, timeout);
+  }, timeout);
+}
+
+function submitQueries() {
+  const promptText = document.getElementById("prompt").value;
+  const lines = document.getElementById("content").value.split('\n').filter(line => line.trim() !== '');
+  const resultsTable = document.getElementById("results");
+  const resultsBody = resultsTable.querySelector("tbody");
+
+  processLines(lines, promptText, resultsBody, 4000);
 }
     </script>
   </body>
