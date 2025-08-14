@@ -1,4 +1,3 @@
-const dotenv = require('dotenv');
 const express = require('express');
 const https = require('https');
 const path = require('path');
@@ -6,9 +5,8 @@ const app = express();
 const port = 3000;
 const gemini_api = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=";
 const tts_api = "https://texttospeech.googleapis.com/v1/text:synthesize?key="
+const ttsInstructions = "\n\nProvide your answer in plain, spoken-language format, without any LaTeX, Markdown, code, or other formatting that is unsuitable for text to speech.";
 const fs = require('fs');
-
-dotenv.config();
 
 const logStream = fs.createWriteStream('server.log', { flags: 'a' });
 
@@ -43,9 +41,9 @@ app.post('/query', async (req, res) => {
     return res.status(500).send('TTS API key is not configured.');
   }
 
-  const prompt = req.body.prompt;
-  const line = req.body.line;
-  const combinedPrompt = prompt + " " + line;
+  const prompt = req.body.prompt.trim();
+  const line = req.body.line.trim();
+  const combinedPrompt = `${prompt} ${line} ${ttsInstructions}`;
 
   const directoryName = sanitizeFilename(prompt);
   const outputDir = path.join(__dirname, 'output', directoryName);
