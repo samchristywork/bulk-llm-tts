@@ -207,10 +207,20 @@ app.post('/query', async (req, res) => {
   const mp3Filepath = path.join(outputDir, `${filenameBase}.mp3`);
 
   try {
-    const geminiResponseText = await callGeminiAPI(combinedPrompt, geminiApiKey);
-    await saveTextToFile(textFilepath, geminiResponseText);
-    const audioContent = await callTTSAPI(geminiResponseText, ttsApiKey);
-    await saveAudioToFile(mp3Filepath, audioContent);
+    let geminiResponseText = null;
+    if (fs.existsSync(textFilepath)) {
+      log(`POST /query - Gemini response found in file: ${textFilepath}`);
+      geminiResponseText = fs.readFileSync(textFilepath, 'utf-8');
+    } else {
+      geminiResponseText = await callGeminiAPI(combinedPrompt, geminiApiKey);
+      await saveTextToFile(textFilepath, geminiResponseText);
+    }
+
+    let audioContent = null;
+    if (!fs.existsSync(mp3Filepath)) {
+      audioContent = await callTTSAPI(geminiResponseText, ttsApiKey);
+      await saveAudioToFile(mp3Filepath, audioContent);
+    }
 
     const filePath = `/output/${directoryName}/${filenameBase}.mp3`;
     res.json({ response: geminiResponseText, filePath: filePath });
